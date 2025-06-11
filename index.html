@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>AdaAttN风格迁移 Web Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.js"></script>
+  <style>
+    body{font-family:sans-serif;margin:20px;}
+    .image-container{display:inline-block;margin:10px;text-align:center;}
+    .image-container img{max-width:300px;max-height:300px;display:block;margin-top:5px;}
+    #progressBar{width:100%;height:20px;margin-top:20px;display:none;}
+    #outputCanvas{border:1px solid #ccc;display:block;margin:20px auto;}
+  </style>
+</head>
+<body>
+  <h1>AdaAttN风格迁移 Web Demo</h1>
+
+  <div>
+    <div class="image-container">
+      <p>要被修改的图片</p>
+      <input type="file" id="contentInput" accept="image/*">
+      <img id="contentPreview" alt="Content preview">
+    </div>
+    <div class="image-container">
+      <p>风格化图片</p>
+      <input type="file" id="styleInput" accept="image/*">
+      <img id="stylePreview" alt="Style preview">
+    </div>
+  </div>
+
+  <button id="inferButton">开 始 推 理</button>
+  <progress id="progressBar" max="100"></progress>
+
+  <div>
+    <div class="image-container">
+      <p>风格化后的图片</p>
+      <canvas id="outputCanvas"></canvas>
+    </div>
+  </div>
+  <a href="https://webgpu.io/status/" target="_blank">检查浏览器 WebGPU 支持</a>
+  <a href="https://html5test.co/" target="_blank">检查浏览器 HTML5 支持</a>
+
+  <script type="module">
+    const baseURL = new URL('.', import.meta.url).href;
+    const workerSrc = `
+      const BASE = '${baseURL}';
+      importScripts(BASE + 'js/ort.all.min.js');
+
+      let session;
+      async function ensureSession(){
+        if(session) return;
+        session = await ort.InferenceSession.create(
+          'https://github.com/whyb/AdaAttN-onnx/releases/download/v1.3/adaattn_slim.onnx',
+          { executionProviders:['webgpu','wasm'] }
+        );
+      }
+      function rgbaToCHW(u8,W,H){
+        const out=new Float32Array(3*W*H);
+        let p=0;
+        for(let i=0;i<u8.length;i+=4){
+          out[p]             =u8[i]/255;
+          out[W*H+p]         =u8[i+1]/255;
+          out[2*W*H+p++]     =u8[i+2]/255;
+        }
+        return out;
+      }
+      onmessage=async({data})=>{
+        if(data.type!=='run') return;
+        const {bufC,bufS,cw,ch,sw,sh}=data;
+        await ensureSession();
+
+        const tC=new ort.Tensor('float32',rgbaToCHW(new Uint8ClampedArray(bufC),cw,ch),[1,3,ch,cw]);
+        const tS=new ort.Tensor('float32',rgbaToCHW(new Uint8ClampedArray(bufS),sw,sh),[1,3,sh,sw]);
+
+        const out=await session.run({content:tC,style:tS});
+        postMessage({type:'result',buf:out.output.data.buffer,ow:out.output.dims[3],oh:out.output.dims[2]},[out.output.data.buffer]);
+      };
+    `;
+    const worker = new Worker(URL.createObjectURL(new Blob([workerSrc],{type:'application/javascript'})));
+
+    const contentInput=document.getElementById('contentInput');
+    const styleInput  =document.getElementById('styleInput');
+    const contentPrev =document.getElementById('contentPreview');
+    const stylePrev   =document.getElementById('stylePreview');
+    const progressBar =document.getElementById('progressBar');
+    const canvasOut   =document.getElementById('outputCanvas');
+    const ctxOut      =canvasOut.getContext('2d');
+    let contentImg=new Image(), styleImg=new Image();
+
+    window.onload=()=>{
+      ['content','style'].forEach((id,idx)=>{
+        const p=id+'.jpg';
+        document.getElementById(id+'Preview').src=p;
+        (idx?styleImg:contentImg).src=p;
+      });
+    };
+
+    contentInput.onchange=e=>{
+      const url=URL.createObjectURL(e.target.files[0]);
+      contentPrev.src=url; contentImg.src=url;
+    };
+    styleInput.onchange=e=>{
+      const url=URL.createObjectURL(e.target.files[0]);
+      stylePrev.src=url; styleImg.src=url;
+    };
+
+    const startProgress=()=>{progressBar.removeAttribute('value');progressBar.style.display='block';};
+    const stopProgress =()=>{progressBar.style.display='none';};
+
+    function imgToBuf(img,w,h){
+      const c=new OffscreenCanvas(w,h);
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      return c.getContext('2d').getImageData(0,0,w,h).data.buffer;
+    }
+    function drawCHW(buf,w,h){
+      const f=new Float32Array(buf);
+      canvasOut.width=w;canvasOut.height=h;
+      const id=ctxOut.createImageData(w,h);
+      for(let i=0;i<w*h;i++){
+        id.data[i*4  ]=f[i]*255;
+        id.data[i*4+1]=f[w*h+i]*255;
+        id.data[i*4+2]=f[2*w*h+i]*255;
+        id.data[i*4+3]=255;
+      }
+      ctxOut.putImageData(id,0,0);
+    }
+
+    worker.onmessage=({data})=>{
+      if(data.type==='result'){drawCHW(data.buf,data.ow,data.oh);stopProgress();}
+    };
+
+    document.getElementById('inferButton').onclick=()=>{
+      if(!contentImg.complete||!styleImg.complete){
+        alert('图片仍在推理中…');return;
+      }
+      startProgress();
+      const cw=contentImg.width , ch=contentImg.height;
+      const sw=styleImg.width   , sh=styleImg.height;
+      worker.postMessage({
+        type:'run',
+        bufC:imgToBuf(contentImg,cw,ch),
+        bufS:imgToBuf(styleImg,sw,sh),
+        cw,ch,sw,sh
+      });
+    };
+  </script>
+</body>
+</html>
