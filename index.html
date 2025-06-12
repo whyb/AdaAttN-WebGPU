@@ -43,7 +43,7 @@
     const baseURL = new URL('.', import.meta.url).href;
     const workerSrc = `
       const BASE = '${baseURL}';
-      importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm');
+      //importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm');
       importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs');
       importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.webgpu.min.js');
 
