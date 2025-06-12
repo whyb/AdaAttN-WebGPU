@@ -44,7 +44,7 @@
     const baseURL = new URL('.', import.meta.url).href;
     const workerSrc = `
       const BASE = '${baseURL}';
-      importScripts(BASE + 'js/ort.all.min.js');
+      importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.js');
 
       let session;
       async function ensureSession(){
