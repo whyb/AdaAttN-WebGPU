@@ -46,7 +46,8 @@
       import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/esm/ort.webgpu.min.js";
       // set wasm path override
       ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
-
+      ort.wasm.numThreads = 16;
+      ort.wasm.simd = true;
       let session;
       async function ensureSession(){
         if(session) return;
