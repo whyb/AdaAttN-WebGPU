@@ -43,8 +43,12 @@
     const baseURL = new URL('.', import.meta.url).href;
     const workerSrc = `
       const BASE = '${baseURL}';
-      self.ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
       importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.webgpu.min.js');
+      if (!self.ort) {
+        console.error("ONNX Runtime Web load failed, self.ort is null");
+      } else {
+        self.ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
+      }
       importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs');
       importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm');
 
