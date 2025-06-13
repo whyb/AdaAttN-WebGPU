@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>AdaAttN风格迁移 Web Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <script src="js/ort.all.min.js" type="javascript"></script>
   <style>
     body{font-family:sans-serif;margin:20px;}
@@ -28,7 +29,7 @@
     </div>
   </div>
 
-  <button id="inferButton">开 始 推 理</button>
+  <button id="inferButton" style="width: 200px;height: 50px;">开 始 推 理</button>
   <progress id="progressBar" max="100"></progress>
 
   <div>
@@ -37,7 +38,7 @@
       <canvas id="outputCanvas"></canvas>
     </div>
   </div>
-  <a href="https://webgpu.io/status/" target="_blank">检查浏览器 WebGPU 支持</a>
+  <a href="https://webgpu.io/status/" target="_blank">检查浏览器 WebGPU 支持</a> <br/>
   <a href="https://html5test.co/" target="_blank">检查浏览器 HTML5 支持</a>
 
   <script type="module">
