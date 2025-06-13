@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>AdaAttN风格迁移 Web Demo</title>
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.webgpu.min.js"></script>
+  <script src="js/ort.all.min.js" type="javascript"></script>
   <style>
     body{font-family:sans-serif;margin:20px;}
     .image-container{display:inline-block;margin:10px;text-align:center;}
@@ -41,13 +41,12 @@
   <a href="https://html5test.co/" target="_blank">检查浏览器 HTML5 支持</a>
 
   <script type="module">
+    const baseURL = new URL('.', import.meta.url).href;
     const workerSrc = `
-      // import ONNXRuntime Web from CDN
-      import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/esm/ort.webgpu.min.js";
-      // set wasm path override
-      ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
-      ort.wasm.numThreads = 16;
-      ort.wasm.simd = true;
+      const BASE = '${baseURL}';
+      const webgpu_url = BASE + "js/ort.all.min.js"
+      importScripts(webgpu_url);
+      ort.env.wasm.wasmPaths = BASE + "js/";
       let session;
       async function ensureSession(){
         if(session) return;
