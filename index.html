@@ -51,7 +51,7 @@
       async function ensureSession(){
         if(session) return;
         session = await ort.InferenceSession.create(
-          'https://github.com/whyb/AdaAttN-onnx/releases/download/v1.3/adaattn_slim.onnx',
+          BASE + 'adaattn_slim_fp16.onnx',
           { executionProviders:['webgpu','wasm'] }
         );
       }
