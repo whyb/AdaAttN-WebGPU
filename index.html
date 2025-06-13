@@ -45,48 +45,70 @@
     const baseURL = new URL('.', import.meta.url).href;
     const workerSrc = `
       const BASE = '${baseURL}';
-      const webgpu_url = BASE + "js/ort.all.min.js"
-      importScripts(webgpu_url);
+      importScripts(BASE+"js/opencv.min.js");
+      importScripts(BASE+"js/ort.all.min.js");
       ort.env.wasm.wasmPaths = BASE + "js/";
       let session;
-      async function ensureSession(){
-        if(session) return;
-        session = await ort.InferenceSession.create(
-          BASE + 'adaattn_slim_fp16.onnx',
-          { executionProviders:['webgpu','wasm'] }
-        );
+
+      const ceil16=x=>((x+15)>>4)<<4;
+      function calc(w,h){
+        let s=Math.min(w,h), nw=w, nh=h;
+        if(s>=256){
+          const k=256/s;
+          nw=Math.round(w*k); nh=Math.round(h*k);
+        }
+        return [ceil16(nw),ceil16(nh)];
       }
       function rgbaToCHW(u8,W,H){
-        const out=new Float32Array(3*W*H);
-        let p=0;
+        const out=new Float32Array(3*W*H); let p=0;
         for(let i=0;i<u8.length;i+=4){
-          out[p]             =u8[i]/255;
-          out[W*H+p]         =u8[i+1]/255;
-          out[2*W*H+p++]     =u8[i+2]/255;
+          out[p]=u8[i]/255;
+          out[W*H+p]=u8[i+1]/255;
+          out[2*W*H+p++]=u8[i+2]/255;
         }
         return out;
       }
+      async function ensureSession(){
+        if(session) return;
+        session=await ort.InferenceSession.create(BASE+'adaattn_slim_fp16.onnx',{executionProviders:['webgpu','wasm']});
+      }
+
       onmessage=async({data})=>{
         if(data.type!=='run') return;
         const {bufC,bufS,cw,ch,sw,sh}=data;
         await ensureSession();
 
-        const tC=new ort.Tensor('float32',rgbaToCHW(new Uint8ClampedArray(bufC),cw,ch),[1,3,ch,cw]);
-        const tS=new ort.Tensor('float32',rgbaToCHW(new Uint8ClampedArray(bufS),sw,sh),[1,3,sh,sw]);
+        const imgDataC=new ImageData(new Uint8ClampedArray(bufC),cw,ch);
+        const imgDataS=new ImageData(new Uint8ClampedArray(bufS),sw,sh);
+
+        const matC=cv.matFromImageData(imgDataC);
+        const matS=cv.matFromImageData(imgDataS);
+
+        const [ncw,nch]=calc(cw,ch);
+        const [nsw,nsh]=calc(sw,sh);
+
+        let dstC=new cv.Mat(), dstS=new cv.Mat();
+        cv.resize(matC,dstC,new cv.Size(ncw,nch),0,0,cv.INTER_AREA);
+        cv.resize(matS,dstS,new cv.Size(nsw,nsh),0,0,cv.INTER_AREA);
+
+        const tC=new ort.Tensor('float32',rgbaToCHW(dstC.data,ncw,nch),[1,3,nch,ncw]);
+        const tS=new ort.Tensor('float32',rgbaToCHW(dstS.data,nsw,nsh),[1,3,nsh,nsw]);
+
+        matC.delete();matS.delete();dstC.delete();dstS.delete();
 
         const out=await session.run({content:tC,style:tS});
         postMessage({type:'result',buf:out.output.data.buffer,ow:out.output.dims[3],oh:out.output.dims[2]},[out.output.data.buffer]);
       };
     `;
-    const worker = new Worker(URL.createObjectURL(new Blob([workerSrc],{type:'application/javascript'})));
+    const worker=new Worker(URL.createObjectURL(new Blob([workerSrc],{type:'application/javascript'})));
 
     const contentInput=document.getElementById('contentInput');
-    const styleInput  =document.getElementById('styleInput');
-    const contentPrev =document.getElementById('contentPreview');
-    const stylePrev   =document.getElementById('stylePreview');
-    const progressBar =document.getElementById('progressBar');
-    const canvasOut   =document.getElementById('outputCanvas');
-    const ctxOut      =canvasOut.getContext('2d');
+    const styleInput=document.getElementById('styleInput');
+    const contentPrev=document.getElementById('contentPreview');
+    const stylePrev=document.getElementById('stylePreview');
+    const progressBar=document.getElementById('progressBar');
+    const canvasOut=document.getElementById('outputCanvas');
+    const ctxOut=canvasOut.getContext('2d');
     let contentImg=new Image(), styleImg=new Image();
 
     window.onload=()=>{
@@ -96,7 +118,6 @@
         (idx?styleImg:contentImg).src=p;
       });
     };
-
     contentInput.onchange=e=>{
       const url=URL.createObjectURL(e.target.files[0]);
       contentPrev.src=url; contentImg.src=url;
@@ -119,7 +140,7 @@
       canvasOut.width=w;canvasOut.height=h;
       const id=ctxOut.createImageData(w,h);
       for(let i=0;i<w*h;i++){
-        id.data[i*4  ]=f[i]*255;
+        id.data[i*4]=f[i]*255;
         id.data[i*4+1]=f[w*h+i]*255;
         id.data[i*4+2]=f[2*w*h+i]*255;
         id.data[i*4+3]=255;
@@ -132,9 +153,7 @@
     };
 
     document.getElementById('inferButton').onclick=()=>{
-      if(!contentImg.complete||!styleImg.complete){
-        alert('图片仍在推理中…');return;
-      }
+      if(!contentImg.complete||!styleImg.complete){alert('图片仍在推理中…');return;}
       startProgress();
       const cw=contentImg.width , ch=contentImg.height;
       const sw=styleImg.width   , sh=styleImg.height;
@@ -143,7 +162,7 @@
         bufC:imgToBuf(contentImg,cw,ch),
         bufS:imgToBuf(styleImg,sw,sh),
         cw,ch,sw,sh
-      });
+      },[imgToBuf(contentImg,cw,ch),imgToBuf(styleImg,sw,sh)]);
     };
   </script>
 </body>
