@@ -70,7 +70,11 @@
       }
       async function ensureSession(){
         if(session) return;
-        session=await ort.InferenceSession.create(BASE+'adaattn_slim_fp16.onnx',{executionProviders:['webgpu','wasm']});
+        let providers = ['wasm'];
+        if (typeof navigator !== 'undefined' && navigator.gpu) {
+          providers = ['webgpu', 'wasm'];
+        }
+        session = await ort.InferenceSession.create(BASE+'adaattn_slim_fp16.onnx', { executionProviders: providers });
       }
 
       onmessage=async({data})=>{
